@@ -1,3 +1,13 @@
+/*******************************************************************************
+ * Copyright (c) 2010, 2012 Phillip Beauvoir
+ * All rights reserved. This program and the accompanying materials
+ * are made available under the terms of the Eclipse Public License v1.0
+ * which accompanies this distribution, and is available at
+ * http://www.eclipse.org/legal/epl-v10.html
+ *
+ * Contributors:
+ *     Phillip Beauvoir
+ *******************************************************************************/
 package com.dadabeatnik.imagegallery;
 
 import java.io.IOException;
@@ -40,7 +50,6 @@ import org.eclipse.ui.part.ViewPart;
  * The View Part for the gallery
  * 
  * @author Phillip Beauvoir
- * @version $Id: ImageGalleryView.java,v 1.1 2009/10/04 12:41:18 phillipus Exp $
  */
 public class ImageGalleryView extends ViewPart implements ISelectionListener {
     
@@ -55,12 +64,12 @@ public class ImageGalleryView extends ViewPart implements ISelectionListener {
     private Gallery fGallery;
     
     public ImageGalleryView() {
-        fExtensions.add("bmp");
-        fExtensions.add("gif");
-        fExtensions.add("png");
-        fExtensions.add("jpg");
-        fExtensions.add("tif");
-        fExtensions.add("ico");
+        fExtensions.add("bmp"); //$NON-NLS-1$
+        fExtensions.add("gif"); //$NON-NLS-1$
+        fExtensions.add("png"); //$NON-NLS-1$
+        fExtensions.add("jpg"); //$NON-NLS-1$
+        fExtensions.add("tif"); //$NON-NLS-1$
+        fExtensions.add("ico"); //$NON-NLS-1$
         //fExtensions.add("icns");
         //fExtensions.add("xpm");
     }
@@ -121,7 +130,7 @@ public class ImageGalleryView extends ViewPart implements ISelectionListener {
 	        @Override
 	        public void widgetSelected(SelectionEvent e) {
 	            GalleryItem item = (GalleryItem)e.item;
-                String text = "";
+                String text = ""; //$NON-NLS-1$
 	            if(item != null) {
 	                IStorage storage = (IStorage)item.getData();
 	                if(storage != null) {
@@ -130,7 +139,7 @@ public class ImageGalleryView extends ViewPart implements ISelectionListener {
 	                Image image = item.getImage();
 	                if(image != null) {
 	                    ImageData id = image.getImageData();
-	                    text += " (" + id.width + " x " + id.height + ")";
+	                    text += " (" + id.width + " x " + id.height + ")"; //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
 	                }
 	            }
                 getViewSite().getActionBars().getStatusLineManager().setMessage(text);
@@ -320,7 +329,7 @@ public class ImageGalleryView extends ViewPart implements ISelectionListener {
             }
 
             // Clear status bar
-            getViewSite().getActionBars().getStatusLineManager().setMessage("");
+            getViewSite().getActionBars().getStatusLineManager().setMessage(""); //$NON-NLS-1$
         }
     }
 }
