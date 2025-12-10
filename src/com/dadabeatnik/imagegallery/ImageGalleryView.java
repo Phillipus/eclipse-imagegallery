@@ -1,45 +1,48 @@
 /*******************************************************************************
- * Copyright (c) 2010, 2012 Phillip Beauvoir
- * All rights reserved. This program and the accompanying materials
- * are made available under the terms of the Eclipse Public License v1.0
+ * Copyright (c) 2010, 2025 Phillip Beauvoir
+ *
+ * This program and the accompanying materials
+ * are made available under the terms of the Eclipse Public License 2.0
  * which accompanies this distribution, and is available at
- * http://www.eclipse.org/legal/epl-v10.html
+ * https://www.eclipse.org/legal/epl-2.0/
+ *
+ * SPDX-License-Identifier: EPL-2.0
  *
  * Contributors:
  *     Phillip Beauvoir
  *******************************************************************************/
 package com.dadabeatnik.imagegallery;
 
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.util.ArrayList;
-import java.util.List;
+import java.nio.charset.StandardCharsets;
+import java.util.HashSet;
+import java.util.Set;
 
 import org.eclipse.core.resources.IContainer;
 import org.eclipse.core.resources.IFile;
 import org.eclipse.core.resources.IStorage;
 import org.eclipse.core.runtime.CoreException;
-import org.eclipse.core.runtime.IPath;
 import org.eclipse.jdt.core.IJavaProject;
 import org.eclipse.jdt.core.IPackageFragment;
 import org.eclipse.jdt.core.IPackageFragmentRoot;
-import org.eclipse.jdt.core.JavaModelException;
 import org.eclipse.jface.viewers.ISelection;
 import org.eclipse.jface.viewers.IStructuredSelection;
-import org.eclipse.nebula.widgets.gallery.DefaultGalleryItemRenderer;
+import org.eclipse.nebula.widgets.gallery.CustomDefaultGalleryItemRenderer;
 import org.eclipse.nebula.widgets.gallery.Gallery;
 import org.eclipse.nebula.widgets.gallery.GalleryItem;
 import org.eclipse.nebula.widgets.gallery.NoGroupRenderer;
 import org.eclipse.swt.SWT;
+import org.eclipse.swt.SWTException;
 import org.eclipse.swt.events.SelectionAdapter;
 import org.eclipse.swt.events.SelectionEvent;
 import org.eclipse.swt.graphics.Image;
-import org.eclipse.swt.graphics.ImageData;
+import org.eclipse.swt.graphics.ImageLoader;
 import org.eclipse.swt.graphics.Point;
+import org.eclipse.swt.graphics.Rectangle;
 import org.eclipse.swt.program.Program;
 import org.eclipse.swt.widgets.Composite;
-import org.eclipse.swt.widgets.Event;
-import org.eclipse.swt.widgets.Listener;
 import org.eclipse.ui.ISelectionListener;
 import org.eclipse.ui.IWorkbenchPart;
 import org.eclipse.ui.part.ViewPart;
@@ -51,63 +54,65 @@ import org.eclipse.ui.part.ViewPart;
  * 
  * @author Phillip Beauvoir
  */
+@SuppressWarnings("nls")
 public class ImageGalleryView extends ViewPart implements ISelectionListener {
     
-    private static int SMALL = 64;
-    private static int LARGE = 128;
+    private static final int SMALL_IMAGE_SIZE = 64;
+    private static final int LARGE_IMAGE_SIZE = 128;
     
-    private List<String> fExtensions = new ArrayList<String>();
+    private static final Set<String> imageExtensions = new HashSet<>();
     
-    /**
-     * The Gallery widget
-     */
-    private Gallery fGallery;
+    private Gallery gallery;
+    private NoGroupRenderer groupRenderer;
+    private GalleryItem rootGroupItem;
+    
+    private boolean isSVGSupported;
     
     public ImageGalleryView() {
-        fExtensions.add("bmp"); //$NON-NLS-1$
-        fExtensions.add("gif"); //$NON-NLS-1$
-        fExtensions.add("png"); //$NON-NLS-1$
-        fExtensions.add("jpg"); //$NON-NLS-1$
-        fExtensions.add("tif"); //$NON-NLS-1$
-        fExtensions.add("ico"); //$NON-NLS-1$
-        //fExtensions.add("icns");
-        //fExtensions.add("xpm");
+        isSVGSupported = isSvgSupported();
+        
+        imageExtensions.add("bmp");
+        imageExtensions.add("gif");
+        imageExtensions.add("png");
+        imageExtensions.add("jpg");
+        imageExtensions.add("tif");
+        imageExtensions.add("ico");
+        imageExtensions.add("svg");
+        //imageExtensions.add("icns");
+        //imageExtensions.add("xpm");
+    }
+    
+    private boolean isSvgSupported() {
+        String svg = """
+                <?xml version="1.0" encoding="UTF-8"?>
+                <svg width="1" height="1" version="1.1" viewBox="0 0 0 0" xmlns="http://www.w3.org/2000/svg"></svg>
+                """;
+        try(InputStream is = new ByteArrayInputStream(svg.getBytes(StandardCharsets.UTF_8))) {
+            new ImageLoader().load(is);
+        }
+        catch(SWTException | IOException e) {
+            return false;
+        }
+        
+        return true;
     }
 
-	/* (non-Javadoc)
-	 * @see org.eclipse.ui.part.WorkbenchPart#createPartControl(org.eclipse.swt.widgets.Composite)
-	 */
 	@Override
     public void createPartControl(Composite parent) {
-	    fGallery = new Gallery(parent, SWT.V_SCROLL);
+	    gallery = new Gallery(parent, SWT.V_SCROLL);
 
-	    // Renderers
-	    NoGroupRenderer gr = new NoGroupRenderer();
-	    gr.setMinMargin(2);
-	    gr.setItemSize(32, 32);
-	    gr.setAutoMargin(true);
-	    fGallery.setGroupRenderer(gr);
+	    // Group renderer
+	    groupRenderer = new NoGroupRenderer();
+	    groupRenderer.setMinMargin(2);
+	    groupRenderer.setItemSize(SMALL_IMAGE_SIZE, SMALL_IMAGE_SIZE);
+	    groupRenderer.setAutoMargin(true);
+	    gallery.setGroupRenderer(groupRenderer);
 	    
-	    DefaultGalleryItemRenderer ir = new DefaultGalleryItemRenderer() {
-	        @Override
-	        protected Point getBestSize(int originalX, int originalY, int maxX, int maxY) {
-	            /*
-	             * Ensure smaller images are not stretched
-	             */
-	            Point pt = super.getBestSize(originalX, originalY, maxX, maxY);
-	            if(pt.x > originalX) {
-	                pt.x = originalX;
-	            }
-	            if(pt.y > originalY) {
-                    pt.y = originalY;
-                }
-	            return pt;
-	        }  
-	    };
-	    fGallery.setItemRenderer(ir);
+	    // Item renderer
+	    gallery.setItemRenderer(new CustomDefaultGalleryItemRenderer());
 	    
-	    // Root Group
-	    new GalleryItem(fGallery, SWT.NONE);
+	    // Root Group Item
+	    rootGroupItem = new GalleryItem(gallery, SWT.NONE);
 	    
 	    // Listen to workbench selections
 	    getSite().getWorkbenchWindow().getSelectionService().addSelectionListener(this);
@@ -121,27 +126,25 @@ public class ImageGalleryView extends ViewPart implements ISelectionListener {
 	    // Update now!
 	    selectionChanged(null, getSite().getWorkbenchWindow().getSelectionService().getSelection());
 	}
-
+	
     /**
      * Show image details in status bar on selection
      */
     private void hookSelectionListener() {
-        fGallery.addSelectionListener(new SelectionAdapter() {
+        gallery.addSelectionListener(new SelectionAdapter() {
 	        @Override
 	        public void widgetSelected(SelectionEvent e) {
+                String text = "";
 	            GalleryItem item = (GalleryItem)e.item;
-                String text = ""; //$NON-NLS-1$
-	            if(item != null) {
-	                IStorage storage = (IStorage)item.getData();
-	                if(storage != null) {
-	                    text += storage.getName();
-	                }
+                if(item != null && item.getData() instanceof IStorage storage) {
+                    text += storage.getName();
 	                Image image = item.getImage();
 	                if(image != null) {
-	                    ImageData id = image.getImageData();
-	                    text += " (" + id.width + " x " + id.height + ")"; //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
+	                    Rectangle r = image.getBounds();
+	                    text += " (" + r.width + " x " + r.height + ")";
 	                }
 	            }
+	            
                 getViewSite().getActionBars().getStatusLineManager().setMessage(text);
 	        }
 	    });
@@ -151,93 +154,63 @@ public class ImageGalleryView extends ViewPart implements ISelectionListener {
      * Launch system app on double click
      */
     private void hookDoubleClickHandler() {
-        fGallery.addListener(SWT.MouseDoubleClick, new Listener() {
-            public void handleEvent(Event event) {
-                GalleryItem item = fGallery.getItem(new Point(event.x, event.y));
-                if(item != null) {
-                    IStorage storage = (IStorage)item.getData();
-                    if(storage instanceof IFile) {
-                        String path = ((IFile)storage).getLocation().toFile().getPath();
-                        Program.launch(path);
-                    }
-                }
+        gallery.addListener(SWT.MouseDoubleClick, event -> {
+            GalleryItem item = gallery.getItem(new Point(event.x, event.y));
+            if(item != null && item.getData() instanceof IFile file) {
+                String path = file.getLocation().toFile().getPath();
+                Program.launch(path);
             }
 	    });
     }
 
-	/* (non-Javadoc)
-	 * @see org.eclipse.ui.part.WorkbenchPart#setFocus()
-	 */
 	@Override
     public void setFocus() {
-	    fGallery.setFocus();
+	    gallery.setFocus();
 	}
 
 	/**
 	 * Render a group of objects
-	 * @param objects
-     * @param group
-     * @param size
 	 */
-	private void render(Object[] objects, GalleryItem group, int size) {
+	private void render(Object[] objects, int size) {
         clearGroupImages();
-        ((NoGroupRenderer)fGallery.getGroupRenderer()).setItemSize(size, size);
+        groupRenderer.setItemSize(size, size);
         
-	    for(int i = 0; i < objects.length; i++) {
-	        Object o = objects[i];
-	        
-	        if(o instanceof IContainer) {
-	            continue;
-	        }
-	        
-	        if(o instanceof IStorage) {
-	            IStorage storage = (IStorage)o;
-	            IPath path = storage.getFullPath();
-                String ext = path.getFileExtension();
-                if(fExtensions.contains(ext)) {
-                    addThumbnail(storage, group);
+        if(objects != null) {
+            for(Object object : objects) {
+                if(object instanceof IStorage storage) {
+                    String ext = storage.getFullPath().getFileExtension();
+                    if(imageExtensions.contains(ext)) {
+                        addThumbnail(storage);
+                    }
                 }
             }
-	    }
+        }
 
-	    fGallery.redraw();
+	    gallery.redraw();
 	}
 	
     /**
-     * Add a thumbnail
-     * @param storage
-     * @param group
+     * Add a thumbnail item
      */
-	private void addThumbnail(IStorage storage, GalleryItem group) {
-	    GalleryItem thumb = new GalleryItem(group, SWT.NONE);
+	private void addThumbnail(IStorage storage) {
+	    GalleryItem item = new GalleryItem(rootGroupItem, SWT.NONE);
 	    
         // Add File
-        thumb.setText(storage.getName());
-        thumb.setData(storage);
+	    item.setText(storage.getName());
+	    item.setData(storage);
+	    
+	    // Check if SVG supported
+	    if("svg".equalsIgnoreCase(storage.getFullPath().getFileExtension()) && !isSVGSupported) {
+	        return;
+	    }
 
         // Add image
-        InputStream stream = null;
-        try {
-            stream = storage.getContents();
-            if(stream == null) {
-                return;
-            }
-            Image image = new Image(null, stream);
-            thumb.setImage(image);
+        try(InputStream stream = storage.getContents()) {
+            Image image = new Image(getSite().getShell().getDisplay(), stream);
+            item.setImage(image);
         }
         catch(Exception ex) {
-            ex.printStackTrace();
-        }
-        finally {
-            try {
-                // Must close!
-                if(stream != null) {
-                    stream.close();
-                }
-            }
-            catch(IOException ex) {
-                ex.printStackTrace();
-            }
+            ImageGalleryPlugin.getDefault().getLog().error("Error creating image", ex);
         }
 	}
 	
@@ -245,91 +218,74 @@ public class ImageGalleryView extends ViewPart implements ISelectionListener {
 	 * Clear old images from root group
 	 */
 	private void clearGroupImages() {
-        if(fGallery != null && !fGallery.isDisposed() && fGallery.getItemCount() > 0) {
-            GalleryItem group = fGallery.getItem(0);
-            if(group != null) {
-                while(group.getItemCount() > 0) {
-                    GalleryItem item = group.getItem(0);
-                    Image image = item.getImage();
-                    if(image != null && !image.isDisposed()) {
-                        image.dispose(); // Not sure if Nebula disposes of images, so we will do it.
-                    }
-                    group.remove(item);
+        if(gallery != null && !gallery.isDisposed()) {
+            for(GalleryItem item : rootGroupItem.getItems()) {
+                // Must dispose of image here
+                Image image = item.getImage();
+                if(image != null) {
+                    image.dispose();
                 }
+                item.dispose();
             }
         }
 	}
 	
     @Override
     public void dispose() {
+        super.dispose();
+
         getSite().getWorkbenchWindow().getSelectionService().removeSelectionListener(this);
         
-        if(fGallery != null && !fGallery.isDisposed()) {
+        if(gallery != null && !gallery.isDisposed()) {
             clearGroupImages();
-            fGallery.remove(0);
-            fGallery.dispose();
-            fGallery = null;
+            gallery.remove(0);
+            gallery.dispose();
+            gallery = null;
         }
         
-        super.dispose();
+        groupRenderer = null;
+        rootGroupItem = null;
     }
 
-    /* (non-Javadoc)
-     * @see org.eclipse.ui.ISelectionListener#selectionChanged(org.eclipse.ui.IWorkbenchPart, org.eclipse.jface.viewers.ISelection)
-     */
+    @Override
     public void selectionChanged(IWorkbenchPart part, ISelection selection) {
-        if(fGallery != null && !fGallery.isDisposed()) {
-            
-            if(selection instanceof IStructuredSelection) {
-                Object selected = ((IStructuredSelection)selection).getFirstElement();
-                int size = SMALL;
-                Object[] resources = null; 
-                
-                // Java Package Fragment Root
-                if(selected instanceof IPackageFragmentRoot) {
-                    try {
-                        resources = ((IPackageFragmentRoot)selected).getNonJavaResources();
-                    }
-                    catch(JavaModelException ex) {
-                    }
-                }
-                
-                // Java Package Fragment
-                else if(selected instanceof IPackageFragment) {
-                    try {
-                        resources = ((IPackageFragment)selected).getNonJavaResources();
-                    }
-                    catch(JavaModelException ex) {
-                    }
-                }
-                
-                // Java Project
-                else if(selected instanceof IJavaProject) {
-                    selected = ((IJavaProject)selected).getProject(); // get the IContainer as selected item
-                }
-                
-                // Container
-                if(selected instanceof IContainer) {
-                    try {
-                        resources = ((IContainer)selected).members();
-                    }
-                    catch(CoreException ex) {
-                    }
-                }
-                
-                // Single File
-                else if(selected instanceof IStorage) {
-                    resources = new Object[] { selected };
-                    size = LARGE;
-                }
-                
-                if(resources != null) {
-                    render(resources, fGallery.getItem(0), size);
-                }
+        if(gallery == null || gallery.isDisposed() || !(selection instanceof IStructuredSelection structuredSelection)) {
+            return;
+        }
+        
+        Object selected = structuredSelection.getFirstElement();
+        int size = SMALL_IMAGE_SIZE;
+        Object[] resources = null;
+
+        try {
+            // Java Package Fragment Root
+            if(selected instanceof IPackageFragmentRoot fr) {
+                resources = fr.getNonJavaResources();
+            }
+            // Java Package Fragment
+            else if(selected instanceof IPackageFragment fragment) {
+                resources = fragment.getNonJavaResources();
+            }
+            // Java Project
+            else if(selected instanceof IJavaProject jp) {
+                selected = jp.getProject(); // get the IContainer as selected item
             }
 
-            // Clear status bar
-            getViewSite().getActionBars().getStatusLineManager().setMessage(""); //$NON-NLS-1$
+            // Container
+            if(selected instanceof IContainer container) {
+                resources = container.members();
+            }
+            // Single File
+            else if(selected instanceof IStorage) {
+                resources = new Object[] { selected };
+                size = LARGE_IMAGE_SIZE;
+            }
+
         }
+        catch(CoreException ex) {
+            ImageGalleryPlugin.getDefault().getLog().error("Error getting resources", ex);
+        }
+
+        render(resources, size);
     }
 }

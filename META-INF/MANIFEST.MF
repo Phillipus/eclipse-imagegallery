@@ -1,8 +1,9 @@
 Manifest-Version: 1.0
 Bundle-ManifestVersion: 2
-Bundle-Name: Image Gallery Plug-in
+Automatic-Module-Name: com.dadabeatnik.imagegallery
+Bundle-Name: Image Gallery
 Bundle-SymbolicName: com.dadabeatnik.imagegallery; singleton:=true
-Bundle-Version: 1.1.1
+Bundle-Version: 2.0.0
 Bundle-Activator: com.dadabeatnik.imagegallery.ImageGalleryPlugin
 Bundle-Vendor: Dada Beatnik
 Require-Bundle: org.eclipse.ui,
@@ -11,5 +12,5 @@ Require-Bundle: org.eclipse.ui,
  org.eclipse.jdt.core
 Bundle-ActivationPolicy: lazy
 Bundle-ClassPath: .,
- lib/org.eclipse.nebula.widgets.gallery_1.0.0.200708130300.jar
-Bundle-RequiredExecutionEnvironment: JavaSE-1.6
+ lib/org.eclipse.nebula.widgets.gallery_1.0.0.202509131601.jar
+Bundle-RequiredExecutionEnvironment: JavaSE-21
