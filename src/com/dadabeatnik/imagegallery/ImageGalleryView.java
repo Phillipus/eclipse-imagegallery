@@ -17,7 +17,11 @@ import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Comparator;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 
 import org.eclipse.core.resources.IContainer;
@@ -43,6 +47,7 @@ import org.eclipse.swt.graphics.Point;
 import org.eclipse.swt.graphics.Rectangle;
 import org.eclipse.swt.program.Program;
 import org.eclipse.swt.widgets.Composite;
+import org.eclipse.swt.widgets.ToolTip;
 import org.eclipse.ui.ISelectionListener;
 import org.eclipse.ui.IWorkbenchPart;
 import org.eclipse.ui.part.ViewPart;
@@ -100,7 +105,44 @@ public class ImageGalleryView extends ViewPart implements ISelectionListener {
 	@Override
     public void createPartControl(Composite parent) {
 	    gallery = new Gallery(parent, SWT.V_SCROLL);
+	    
+	    // Tooltip
+	    ToolTip tip = new ToolTip(gallery.getShell(), SWT.BALLOON | SWT.ICON_INFORMATION);
+	    
+	    gallery.addListener(SWT.MouseHover, event -> {
+            GalleryItem item = gallery.getItem(new Point(event.x, event.y));
+            if(item != null ) {
+                tip.setText(getImageDetails(item, false, false));
+                tip.setMessage(getImageDetails(item, true, true));
+                tip.setLocation(gallery.toDisplay(event.x, event.y + 10)); // Position slightly below cursor
+                tip.setVisible(true);
+            }
+            else {
+                tip.setVisible(false);
+            }
+	    });
+	    
+	    gallery.addListener(SWT.MouseExit, event -> {
+	        tip.setVisible(false);
+        });
+	    
+	    gallery.addListener(SWT.MouseMove, event -> {
+            tip.setVisible(false);
+        });
 
+	    // Dispose of the gallery images when the parent Composite is disposed *not* the Gallery.
+	    // The Gallery will dispose all child items before its dispose listener is called!
+        parent.addDisposeListener(e -> {
+            tip.dispose();
+            
+            for(GalleryItem item : rootGroupItem.getItems()) {
+                Image image = item.getImage();
+                if(image != null) {
+                    image.dispose();
+                }
+            }
+        });
+        
 	    // Group renderer
 	    groupRenderer = new NoGroupRenderer();
 	    groupRenderer.setMinMargin(2);
@@ -134,20 +176,28 @@ public class ImageGalleryView extends ViewPart implements ISelectionListener {
         gallery.addSelectionListener(new SelectionAdapter() {
 	        @Override
 	        public void widgetSelected(SelectionEvent e) {
-                String text = "";
-	            GalleryItem item = (GalleryItem)e.item;
-                if(item != null && item.getData() instanceof IStorage storage) {
-                    text += storage.getName();
-	                Image image = item.getImage();
-	                if(image != null) {
-	                    Rectangle r = image.getBounds();
-	                    text += " (" + r.width + " x " + r.height + ")";
-	                }
-	            }
-	            
+                String text = getImageDetails((GalleryItem)e.item, true, true);
                 getViewSite().getActionBars().getStatusLineManager().setMessage(text);
 	        }
 	    });
+    }
+    
+    private String getImageDetails(GalleryItem item, boolean fullName, boolean size) {
+        String text = "";
+        
+        if(item != null && item.getData() instanceof IStorage storage) {
+            text += fullName ? storage.getFullPath() : storage.getName();
+            if(size) {
+                Image image = item.getImage();
+                if(image != null) {
+                    Rectangle r = image.getBounds();
+                    text += " (" + r.width + " x " + r.height + ")";
+                }
+
+            }
+        }
+        
+        return text;
     }
 
     /**
@@ -171,17 +221,17 @@ public class ImageGalleryView extends ViewPart implements ISelectionListener {
 	/**
 	 * Render a group of objects
 	 */
-	private void render(Object[] objects, int size) {
+	private void render(List<Object> selection) {
         clearGroupImages();
+        
+        int size = selection.size() == 1 ? LARGE_IMAGE_SIZE : SMALL_IMAGE_SIZE;
         groupRenderer.setItemSize(size, size);
         
-        if(objects != null) {
-            for(Object object : objects) {
-                if(object instanceof IStorage storage) {
-                    String ext = storage.getFullPath().getFileExtension();
-                    if(imageExtensions.contains(ext)) {
-                        addThumbnail(storage);
-                    }
+        for(Object object : selection) {
+            if(object instanceof IStorage storage) {
+                String ext = storage.getFullPath().getFileExtension();
+                if(imageExtensions.contains(ext)) {
+                    addThumbnail(storage);
                 }
             }
         }
@@ -233,16 +283,9 @@ public class ImageGalleryView extends ViewPart implements ISelectionListener {
     @Override
     public void dispose() {
         super.dispose();
-
         getSite().getWorkbenchWindow().getSelectionService().removeSelectionListener(this);
         
-        if(gallery != null && !gallery.isDisposed()) {
-            clearGroupImages();
-            gallery.remove(0);
-            gallery.dispose();
-            gallery = null;
-        }
-        
+        gallery = null;
         groupRenderer = null;
         rootGroupItem = null;
     }
@@ -253,39 +296,53 @@ public class ImageGalleryView extends ViewPart implements ISelectionListener {
             return;
         }
         
-        Object selected = structuredSelection.getFirstElement();
-        int size = SMALL_IMAGE_SIZE;
-        Object[] resources = null;
+        Set<Object> selected = new HashSet<>();
+        
+        for(Object object : structuredSelection.toArray()) {
+            Object[] resources = null;
+            
+            try {
+                // Java Package Fragment Root
+                if(object instanceof IPackageFragmentRoot fr) {
+                    resources = fr.getNonJavaResources();
+                }
+                // Java Package Fragment
+                else if(object instanceof IPackageFragment fragment) {
+                    resources = fragment.getNonJavaResources();
+                }
+                // Java Project
+                else if(object instanceof IJavaProject jp) {
+                    object = jp.getProject(); // get the IContainer as selected item
+                }
 
-        try {
-            // Java Package Fragment Root
-            if(selected instanceof IPackageFragmentRoot fr) {
-                resources = fr.getNonJavaResources();
+                // Container
+                if(object instanceof IContainer container) {
+                    resources = container.members();
+                }
+                // Single File
+                else if(object instanceof IStorage) {
+                    resources = new Object[] { object };
+                }
             }
-            // Java Package Fragment
-            else if(selected instanceof IPackageFragment fragment) {
-                resources = fragment.getNonJavaResources();
+            catch(CoreException ex) {
+                ImageGalleryPlugin.getDefault().getLog().error("Error getting resources", ex);
             }
-            // Java Project
-            else if(selected instanceof IJavaProject jp) {
-                selected = jp.getProject(); // get the IContainer as selected item
+            
+            if(resources != null) {
+                selected.addAll(Arrays.asList(resources));
             }
-
-            // Container
-            if(selected instanceof IContainer container) {
-                resources = container.members();
-            }
-            // Single File
-            else if(selected instanceof IStorage) {
-                resources = new Object[] { selected };
-                size = LARGE_IMAGE_SIZE;
-            }
-
         }
-        catch(CoreException ex) {
-            ImageGalleryPlugin.getDefault().getLog().error("Error getting resources", ex);
-        }
-
-        render(resources, size);
+        
+        // Sort by name
+        List<Object> list = new ArrayList<>(selected);
+        
+        list.sort(Comparator.comparing(obj -> {
+            if(obj instanceof IStorage storage) {
+                return storage.getName();
+            }
+            return obj.toString(); // fallback
+        }, String.CASE_INSENSITIVE_ORDER));
+        
+        render(list);
     }
 }
